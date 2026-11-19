@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>GymGraph — Documentación de Diseño y Justificación</title>
+<style>
+  @page { size: Letter; margin: 2.2cm 2cm 2.2cm 2cm; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #1d2330; }
+  h1 { font-size: 20pt; color: #0d6b4c; margin: 0 0 6pt; }
+  h2 { font-size: 15pt; color: #0d6b4c; border-bottom: 2px solid #18b37e; padding-bottom: 4pt; margin-top: 22pt; page-break-after: avoid; }
+  h3 { font-size: 12pt; margin: 14pt 0 6pt; page-break-after: avoid; }
+  p { margin: 0 0 8pt; text-align: justify; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 12pt; font-size: 10pt; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 1px solid #cfd6e0; padding: 5pt 7pt; text-align: left; vertical-align: top; }
+  th { background: #e9f6f0; }
+  code { font-family: "DejaVu Sans Mono", Consolas, monospace; font-size: 9.5pt; background: #f1f3f6; padding: 0 3px; border-radius: 3px; }
+  pre { font-family: "DejaVu Sans Mono", Consolas, monospace; font-size: 8.8pt; line-height: 1.35; background: #f5f7fa; border-left: 3px solid #18b37e; padding: 8pt 10pt; white-space: pre-wrap; page-break-inside: avoid; margin: 4pt 0 10pt; }
+  .portada { height: 22cm; display: flex; flex-direction: column; justify-content: center; page-break-after: always; }
+  .portada h1 { font-size: 30pt; }
+  .portada .sub { font-size: 14pt; color: #4b5565; margin-bottom: 40pt; }
+  .portada table { width: auto; font-size: 11pt; }
+  .portada td { border: none; padding: 3pt 14pt 3pt 0; }
+  .nota { background: #fff8e6; border-left: 3px solid #f2b84b; padding: 6pt 10pt; font-size: 10pt; margin: 6pt 0 10pt; }
+  .figura { text-align: center; margin: 8pt 0 4pt; page-break-inside: avoid; }
+  .pie { text-align: center; font-size: 9pt; color: #5b6575; margin-bottom: 12pt; }
+  .salto { page-break-before: always; }
+  ul { margin: 0 0 8pt 18pt; padding: 0; }
+  li { margin-bottom: 3pt; }
+</style>
+</head>
+<body>
+
+<div class="portada">
+  <h1>GymGraph</h1>
+  <div class="sub">Motor de recomendaciones para una tienda de productos de gimnasio<br>con base de datos de grafo Neo4j AuraDB</div>
+  <table>
+    <tr><td><b>Materia</b></td><td>Bases de Datos Avanzadas</td></tr>
+    <tr><td><b>Proyecto</b></td><td>Desarrollo e Integración de Aplicaciones con Bases de Datos NoSQL en la Nube</td></tr>
+    <tr><td><b>Alumno</b></td><td>Jorge Emilio León Saucedo</td></tr>
+    <tr><td><b>Matrícula</b></td><td>00531336</td></tr>
+    <tr><td><b>Paradigma</b></td><td>Red / Grafo (property graph)</td></tr>
+    <tr><td><b>Servicio cloud</b></td><td>Neo4j AuraDB Free (DBaaS)</td></tr>
+    <tr><td><b>Tecnologías</b></td><td>Node.js, Express, neo4j-driver (oficial), Cypher</td></tr>
+    <tr><td><b>Fecha</b></td><td>Noviembre 2026</td></tr>
+  </table>
+</div>
+
+<h2>1. Introducción y dominio del problema</h2>
+<p>Las tiendas de suplementos y artículos deportivos venden productos muy relacionados entre sí: quien compra proteína suele comprar creatina y un shaker; quien busca perder grasa se interesa en termogénicos, L-carnitina y accesorios de cardio. Detectar esas relaciones permite recomendar productos relevantes, armar combos y aprovechar el programa de referidos, lo que incrementa el ticket promedio y la fidelidad del cliente.</p>
+<p><b>GymGraph</b> es una aplicación web que administra el catálogo, los clientes y sus compras de una tienda de productos de gimnasio, y que genera recomendaciones en tiempo real recorriendo la red de relaciones entre clientes, productos, categorías, marcas y objetivos de entrenamiento.</p>
+<h3>Contexto funcional</h3>
+<table>
+  <tr><th style="width:28%">Funcionalidad</th><th>Descripción</th></tr>
+  <tr><td>Gestión de clientes</td><td>CRUD completo. Cada cliente declara uno o varios objetivos (ganar masa muscular, perder grasa, mejorar resistencia, aumentar fuerza, recuperación).</td></tr>
+  <tr><td>Gestión de productos</td><td>CRUD completo con precio, stock, categoría, marca y los objetivos que el producto ayuda a lograr.</td></tr>
+  <tr><td>Compras y devoluciones</td><td>Registro transaccional que descuenta inventario y rechaza compras sin stock suficiente; las devoluciones regresan las unidades.</td></tr>
+  <tr><td>Calificaciones</td><td>El cliente califica de 1 a 5 estrellas solo los productos que compró.</td></tr>
+  <tr><td>Programa de referidos</td><td>Un cliente puede invitar a otro, formando cadenas de referidos de varios niveles.</td></tr>
+  <tr><td>Recomendaciones</td><td>Filtrado colaborativo, recomendación por objetivo, “quienes compraron esto también compraron”, combos de productos y alcance de referidos.</td></tr>
+  <tr><td>Exploración del grafo</td><td>Visualización de la vecindad de un cliente y del camino más corto entre dos clientes.</td></tr>
+</table>
+
+<h2>2. Justificación del paradigma: ¿por qué un grafo y no un SGBD relacional?</h2>
+<p>El valor del sistema no está en los registros aislados (un cliente, un producto), sino en las <b>conexiones</b> entre ellos: quién compró qué, qué clientes se parecen, qué productos aparecen juntos y quién refirió a quién. Las consultas que generan recomendaciones son <b>recorridos de varios saltos</b> sobre esas conexiones. Este es exactamente el tipo de carga de trabajo para el que fue diseñado el modelo de grafo.</p>
+
+<h3>2.1 Adyacencia libre de índices frente a JOINs</h3>
+<p>En un SGBD relacional, una relación muchos-a-muchos como “cliente compró producto” se guarda en una tabla intermedia (<code>compras</code>), y recorrerla exige un <code>JOIN</code> que busca coincidencias en un índice B-tree: costo aproximado <i>O(log n)</i> por cada fila en cada salto. Una recomendación colaborativa necesita al menos tres saltos (yo → mis productos → otros clientes → sus productos), lo que implica varios auto-JOIN sobre la misma tabla, cuyo costo crece con el tamaño <b>total</b> de la tabla.</p>
+<p>Neo4j usa <b>adyacencia libre de índices</b> (<i>index-free adjacency</i>): cada nodo guarda punteros físicos directos a sus relaciones. Recorrer una relación cuesta <i>O(1)</i> y el costo de una consulta depende solo de la <b>porción del grafo que se visita</b>, no del tamaño total de la base. Si la tienda pasa de mil a un millón de compras, la recomendación para un cliente sigue tocando únicamente su vecindad.</p>
+
+<h3>2.2 Comparación de la misma consulta</h3>
+<p>“Productos que compraron los clientes que compraron lo mismo que yo” en SQL:</p>
+<pre>SELECT p.sku, p.nombre, COUNT(DISTINCT c2.cliente_id) AS puntaje
+FROM compras c1
+JOIN compras c2 ON c2.sku = c1.sku AND c2.cliente_id &lt;&gt; c1.cliente_id   -- clientes parecidos
+JOIN compras c3 ON c3.cliente_id = c2.cliente_id                         -- lo que ellos compraron
+JOIN productos p ON p.sku = c3.sku
+WHERE c1.cliente_id = 'C001'
+  AND c3.sku NOT IN (SELECT sku FROM compras WHERE cliente_id = 'C001')
+GROUP BY p.sku, p.nombre
+ORDER BY puntaje DESC LIMIT 5;</pre>
+<p>La misma consulta en Cypher expresa el recorrido como un patrón visual:</p>
+<pre>MATCH (yo:Cliente {id:'C001'})-[:COMPRO]-&gt;(:Producto)&lt;-[:COMPRO]-(otro:Cliente)-[:COMPRO]-&gt;(rec:Producto)
+WHERE NOT EXISTS { (yo)-[:COMPRO]-&gt;(rec) }
+RETURN rec.sku, rec.nombre, count(DISTINCT otro) AS puntaje
+ORDER BY puntaje DESC LIMIT 5;</pre>
+<p>Para la búsqueda de caminos (p. ej. la cadena de referidos entre dos clientes) la diferencia es aún mayor: SQL necesita un <code>WITH RECURSIVE</code> con control manual de ciclos y profundidad, mientras que Cypher ofrece <code>shortestPath()</code> y patrones de longitud variable <code>[:REFIRIO*1..]</code> de forma nativa.</p>
+
+<h3>2.3 Cuadro comparativo</h3>
+<table>
+  <tr><th style="width:22%">Criterio</th><th>Relacional (SQL)</th><th>Grafo (Neo4j)</th></tr>
+  <tr><td>Relaciones N:M</td><td>Tabla intermedia + JOIN en tiempo de consulta.</td><td>Relaciones de primera clase, almacenadas y con propiedades propias (<code>cantidad</code>, <code>estrellas</code>, <code>fecha</code>).</td></tr>
+  <tr><td>Recorridos de varios saltos</td><td>Un JOIN por salto; el costo crece con el tamaño de las tablas.</td><td>Punteros directos; el costo crece con la vecindad visitada.</td></tr>
+  <tr><td>Profundidad variable / caminos</td><td><code>WITH RECURSIVE</code>, difícil de leer y optimizar.</td><td><code>shortestPath</code>, <code>[*1..n]</code> nativos.</td></tr>
+  <tr><td>Evolución del modelo</td><td>Nuevas relaciones requieren tablas y migraciones (<code>ALTER TABLE</code>).</td><td>Esquema flexible: agregar <code>:REFIRIO</code> o <code>:AYUDA_A</code> no altera los datos existentes.</td></tr>
+  <tr><td>Legibilidad</td><td>El recorrido queda oculto en las cláusulas JOIN.</td><td>El patrón ASCII <code>(a)-[:R]-&gt;(b)</code> se parece al diagrama del dominio.</td></tr>
+  <tr><td>Integridad</td><td>Claves foráneas, esquema rígido, ACID.</td><td>Restricciones UNIQUE, transacciones ACID; menos validación estructural automática.</td></tr>
+  <tr><td>Agregaciones masivas tabulares</td><td><b>Ventaja SQL:</b> reportes contables, sumas por periodo, OLAP.</td><td>Posible, pero no es su punto fuerte.</td></tr>
+</table>
+<div class="nota"><b>Conclusión.</b> Las operaciones críticas de GymGraph (recomendaciones, co-compras, caminos de referidos y vecindades) son recorridos de relaciones de varios saltos y profundidad variable. Un modelo de grafo las expresa de forma natural y las ejecuta con un costo proporcional a los datos visitados, por lo que es la elección técnica adecuada. Un SGBD relacional seguiría siendo preferible para la contabilidad o la facturación de la tienda, que son cargas tabulares; en una arquitectura real ambos pueden coexistir (persistencia políglota).</div>
+
+<h2 class="salto">3. Arquitectura de la solución</h2>
+<div class="figura">
+<svg width="640" height="330" viewBox="0 0 640 330" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif" font-size="12">
+  <defs><marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3b4656"/></marker></defs>
+  <!-- Cliente -->
+  <rect x="10" y="60" width="150" height="200" rx="10" fill="#eef4ff" stroke="#4c8dff"/>
+  <text x="85" y="84" text-anchor="middle" font-weight="bold">Cliente (navegador)</text>
+  <rect x="25" y="100" width="120" height="34" rx="6" fill="#fff" stroke="#9db8ef"/><text x="85" y="121" text-anchor="middle">index.html / CSS</text>
+  <rect x="25" y="145" width="120" height="34" rx="6" fill="#fff" stroke="#9db8ef"/><text x="85" y="166" text-anchor="middle">app.js (fetch)</text>
+  <rect x="25" y="190" width="120" height="34" rx="6" fill="#fff" stroke="#9db8ef"/><text x="85" y="211" text-anchor="middle">vis-network</text>
+  <!-- Backend -->
+  <rect x="215" y="20" width="220" height="290" rx="10" fill="#effaf5" stroke="#18b37e"/>
+  <text x="325" y="44" text-anchor="middle" font-weight="bold">Backend Node.js + Express</text>
+  <rect x="232" y="58" width="186" height="32" rx="6" fill="#fff" stroke="#8fd3b8"/><text x="325" y="78" text-anchor="middle">routes/ (API REST)</text>
+  <rect x="232" y="100" width="186" height="32" rx="6" fill="#fff" stroke="#8fd3b8"/><text x="325" y="120" text-anchor="middle">middleware/ (validación, errores)</text>
+  <rect x="232" y="142" width="186" height="32" rx="6" fill="#fff" stroke="#8fd3b8"/><text x="325" y="162" text-anchor="middle">repositories/ (consultas Cypher)</text>
+  <rect x="232" y="184" width="186" height="46" rx="6" fill="#d8f3e8" stroke="#18b37e"/><text x="325" y="203" text-anchor="middle" font-weight="bold">config/db.js</text><text x="325" y="220" text-anchor="middle" font-size="11">neo4j-driver (SDK oficial)</text>
+  <rect x="232" y="240" width="186" height="32" rx="6" fill="#fff8e6" stroke="#f2b84b"/><text x="325" y="260" text-anchor="middle">.env (credenciales)</text>
+  <text x="325" y="296" text-anchor="middle" font-size="10" fill="#5b6575">localhost:3000 · scripts/schema.js · seed.js</text>
+  <!-- Nube -->
+  <path d="M500 95 q-10 -40 35 -42 q15 -30 55 -12 q45 -5 40 40 q22 30 -10 50 l-110 0 q-30 -10 -10 -36z" fill="#f4effa" stroke="#c678dd"/>
+  <text x="565" y="78" text-anchor="middle" font-weight="bold">Neo4j AuraDB</text>
+  <text x="565" y="95" text-anchor="middle" font-size="11">(DBaaS en la nube)</text>
+  <text x="565" y="112" text-anchor="middle" font-size="10">Neo4j 5 · motor Cypher</text>
+  <circle cx="530" cy="190" r="10" fill="#4c8dff"/><circle cx="590" cy="175" r="10" fill="#18b37e"/><circle cx="600" cy="230" r="10" fill="#f2b84b"/><circle cx="545" cy="245" r="10" fill="#e5534b"/>
+  <line x1="540" y1="188" x2="580" y2="177" stroke="#777"/><line x1="592" y1="185" x2="599" y2="220" stroke="#777"/><line x1="535" y1="199" x2="543" y2="235" stroke="#777"/><line x1="555" y1="244" x2="590" y2="232" stroke="#777"/>
+  <text x="565" y="285" text-anchor="middle" font-size="10" fill="#5b6575">almacenamiento de grafo nativo</text>
+  <!-- Flechas -->
+  <line x1="160" y1="150" x2="213" y2="150" stroke="#3b4656" stroke-width="1.6" marker-end="url(#fl)" marker-start="url(#fl)"/>
+  <text x="187" y="140" text-anchor="middle" font-size="10">HTTP</text><text x="187" y="168" text-anchor="middle" font-size="10">JSON</text>
+  <line x1="418" y1="207" x2="508" y2="140" stroke="#3b4656" stroke-width="1.6" marker-end="url(#fl)" marker-start="url(#fl)"/>
+  <text x="478" y="222" text-anchor="middle" font-size="10">Bolt + TLS</text><text x="478" y="235" text-anchor="middle" font-size="10">neo4j+s://…:7687</text>
+</svg>
+</div>
+<div class="pie">Figura 1. Diagrama de bloques de la arquitectura.</div>
+
+<table>
+  <tr><th style="width:24%">Componente</th><th>Responsabilidad</th></tr>
+  <tr><td>Cliente (navegador)</td><td>Interfaz con pestañas para CRUD, compras, recomendaciones y exploración visual del grafo. Se comunica únicamente con la API REST mediante <code>fetch</code> y JSON.</td></tr>
+  <tr><td>Rutas (Express)</td><td>Definen los endpoints REST (<code>/api/clientes</code>, <code>/api/productos</code>, <code>/api/recomendaciones</code>) y traducen HTTP a llamadas a los repositorios.</td></tr>
+  <tr><td>Middleware</td><td>Valida campos obligatorios y traduce errores del driver a códigos HTTP (409 por restricción UNIQUE, 503 sin conexión, 401 credenciales).</td></tr>
+  <tr><td>Repositorios</td><td>Concentran todo el código Cypher. Siempre usan <b>consultas parametrizadas</b> (<code>$id</code>, <code>$sku</code>) para evitar inyección y aprovechar la caché de planes de ejecución.</td></tr>
+  <tr><td>config/db.js</td><td>Crea una sola instancia del <b>driver oficial</b> (con pool de conexiones), lee las credenciales de variables de entorno y expone <code>read()</code> / <code>write()</code> sobre transacciones administradas <code>executeRead</code> / <code>executeWrite</code>, que reintentan automáticamente ante errores transitorios.</td></tr>
+  <tr><td>Neo4j AuraDB</td><td>Base de datos de grafo administrada en la nube (Managed Service). Conexión cifrada con el esquema <code>neo4j+s://</code> (Bolt sobre TLS) y enrutamiento automático del clúster.</td></tr>
+</table>
+
+<h2 class="salto">4. Diseño del modelo NoSQL (grafo de propiedades)</h2>
+<div class="figura">
+<svg width="640" height="390" viewBox="0 0 640 390" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif" font-size="12">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3b4656"/></marker></defs>
+  <!-- relaciones -->
+  <path d="M95 150 C 40 60, 160 40, 140 120" fill="none" stroke="#3b4656" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="70" y="52" font-size="11" font-weight="bold">:REFIRIO</text><text x="70" y="65" font-size="10" fill="#5b6575">{fecha}</text>
+  <line x1="175" y1="165" x2="388" y2="165" stroke="#3b4656" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="280" y="140" text-anchor="middle" font-size="11" font-weight="bold">:COMPRO</text>
+  <text x="280" y="155" text-anchor="middle" font-size="10" fill="#5b6575">{cantidad, veces, primeraFecha, ultimaFecha}</text>
+  <path d="M168 195 Q 280 250 392 195" fill="none" stroke="#3b4656" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="280" y="248" text-anchor="middle" font-size="11" font-weight="bold">:CALIFICO</text>
+  <text x="280" y="261" text-anchor="middle" font-size="10" fill="#5b6575">{estrellas, fecha}</text>
+  <line x1="130" y1="215" x2="268" y2="318" stroke="#3b4656" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="160" y="285" font-size="11" font-weight="bold">:BUSCA</text>
+  <line x1="440" y1="215" x2="355" y2="318" stroke="#3b4656" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="408" y="285" font-size="11" font-weight="bold">:AYUDA_A</text>
+  <line x1="490" y1="140" x2="545" y2="85" stroke="#3b4656" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="512" y="104" text-anchor="end" font-size="11" font-weight="bold">:PERTENECE_A</text>
+  <line x1="500" y1="185" x2="548" y2="250" stroke="#3b4656" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="530" y="215" font-size="11" font-weight="bold">:DE_MARCA</text>
+  <!-- nodos -->
+  <circle cx="125" cy="170" r="50" fill="#4c8dff"/><text x="125" y="166" text-anchor="middle" fill="#fff" font-weight="bold">:Cliente</text>
+  <text x="125" y="182" text-anchor="middle" fill="#fff" font-size="9">id, email</text>
+  <circle cx="440" cy="170" r="50" fill="#18b37e"/><text x="440" y="166" text-anchor="middle" fill="#fff" font-weight="bold">:Producto</text>
+  <text x="440" y="182" text-anchor="middle" fill="#fff" font-size="9">sku, precio, stock</text>
+  <circle cx="310" cy="345" r="38" fill="#e5534b"/><text x="310" y="349" text-anchor="middle" fill="#fff" font-weight="bold">:Objetivo</text>
+  <circle cx="580" cy="55" r="38" fill="#f2b84b"/><text x="580" y="59" text-anchor="middle" font-weight="bold">:Categoria</text>
+  <circle cx="580" cy="285" r="38" fill="#c678dd"/><text x="580" y="289" text-anchor="middle" fill="#fff" font-weight="bold">:Marca</text>
+</svg>
+</div>
+<div class="pie">Figura 2. Diagrama del grafo del dominio: etiquetas, propiedades y dirección de las relaciones.</div>
+
+<h3>4.1 Nodos (Labels) y propiedades</h3>
+<table>
+  <tr><th style="width:16%">Label</th><th>Propiedades (tipo)</th><th style="width:30%">Restricciones / índices</th></tr>
+  <tr><td><code>:Cliente</code></td><td><code>id</code> (String, ej. C001), <code>nombre</code> (String), <code>email</code> (String), <code>ciudad</code> (String), <code>creadoEn</code> (DateTime)</td><td>UNIQUE <code>id</code>, UNIQUE <code>email</code>, índice <code>nombre</code></td></tr>
+  <tr><td><code>:Producto</code></td><td><code>sku</code> (String), <code>nombre</code> (String), <code>precio</code> (Float, MXN), <code>stock</code> (Integer), <code>descripcion</code> (String)</td><td>UNIQUE <code>sku</code>, índice <code>nombre</code></td></tr>
+  <tr><td><code>:Categoria</code></td><td><code>nombre</code> (String)</td><td>UNIQUE <code>nombre</code></td></tr>
+  <tr><td><code>:Marca</code></td><td><code>nombre</code> (String)</td><td>UNIQUE <code>nombre</code></td></tr>
+  <tr><td><code>:Objetivo</code></td><td><code>nombre</code> (String: Ganar masa muscular, Perder grasa, Mejorar resistencia, Aumentar fuerza, Recuperación)</td><td>UNIQUE <code>nombre</code></td></tr>
+</table>
+
+<h3>4.2 Relaciones (tipo, dirección y propiedades)</h3>
+<table>
+  <tr><th style="width:24%">Relación</th><th style="width:28%">Propiedades</th><th>Significado y decisión de diseño</th></tr>
+  <tr><td><code>(Cliente)-[:COMPRO]-&gt;(Producto)</code></td><td><code>cantidad</code>, <code>veces</code> (Integer), <code>primeraFecha</code>, <code>ultimaFecha</code> (Date)</td><td>Se usa <b>una relación por par cliente–producto</b> (creada con <code>MERGE</code>) que acumula cantidad y número de compras. Mantiene el grafo compacto y hace que los recorridos de recomendación no cuenten compras repetidas.</td></tr>
+  <tr><td><code>(Cliente)-[:CALIFICO]-&gt;(Producto)</code></td><td><code>estrellas</code> (Integer 1–5), <code>fecha</code> (Date)</td><td>Solo se permite si existe <code>:COMPRO</code>. Separada de la compra porque es opcional y puede cambiar.</td></tr>
+  <tr><td><code>(Cliente)-[:BUSCA]-&gt;(Objetivo)</code></td><td>—</td><td>Interés declarado del cliente; base de la recomendación por contenido.</td></tr>
+  <tr><td><code>(Cliente)-[:REFIRIO]-&gt;(Cliente)</code></td><td><code>fecha</code> (Date)</td><td>Dirigida: de quien invita hacia el invitado. Permite cadenas de longitud variable.</td></tr>
+  <tr><td><code>(Producto)-[:PERTENECE_A]-&gt;(Categoria)</code></td><td>—</td><td>Categoría modelada como nodo (no como propiedad) para poder recorrer “productos de la misma categoría” y evitar texto duplicado.</td></tr>
+  <tr><td><code>(Producto)-[:DE_MARCA]-&gt;(Marca)</code></td><td>—</td><td>Igual que la categoría: nodo compartido.</td></tr>
+  <tr><td><code>(Producto)-[:AYUDA_A]-&gt;(Objetivo)</code></td><td>—</td><td>Conecta el catálogo con los intereses de los clientes.</td></tr>
+</table>
+
+<h3>4.3 Buenas prácticas aplicadas</h3>
+<ul>
+  <li><b>Nombres:</b> labels en PascalCase singular (<code>:Producto</code>), relaciones en MAYÚSCULAS con verbo (<code>:COMPRO</code>), propiedades en camelCase (<code>ultimaFecha</code>), siguiendo la guía de estilo de Cypher.</li>
+  <li><b>Entidades repetidas como nodos:</b> categoría, marca y objetivo son nodos únicos creados con <code>MERGE</code>, lo que permite recorrerlos y evita inconsistencias de escritura.</li>
+  <li><b>Propiedades en relaciones:</b> la información que describe el vínculo (cantidad, estrellas, fecha) vive en la relación, no en tablas auxiliares.</li>
+  <li><b>Restricciones de unicidad</b> sobre las claves naturales: además de garantizar integridad, crean índices que hacen que el punto de entrada de cada recorrido (<code>MATCH (c:Cliente {id:$id})</code>) sea una búsqueda indexada.</li>
+  <li><b>Consultas parametrizadas</b> en todo el código; la única parte dinámica (profundidad de la vecindad y tipo de camino) se valida contra una lista blanca, porque Cypher no permite parametrizar longitudes de patrón ni tipos de relación.</li>
+</ul>
+
+<h2 class="salto">5. Catálogo de consultas</h2>
+<p>Consultas tal como se ejecutan desde los repositorios del proyecto mediante el driver oficial (<code>session.executeRead / executeWrite</code>). Los parámetros se indican con <code>$</code>.</p>
+
+<h3>5.1 Script de base de datos (scripts/schema.cypher)</h3>
+<pre>CREATE CONSTRAINT cliente_id     IF NOT EXISTS FOR (c:Cliente)   REQUIRE c.id IS UNIQUE;
+CREATE CONSTRAINT cliente_email  IF NOT EXISTS FOR (c:Cliente)   REQUIRE c.email IS UNIQUE;
+CREATE CONSTRAINT producto_sku   IF NOT EXISTS FOR (p:Producto)  REQUIRE p.sku IS UNIQUE;
+CREATE CONSTRAINT categoria_nombre IF NOT EXISTS FOR (c:Categoria) REQUIRE c.nombre IS UNIQUE;
+CREATE CONSTRAINT marca_nombre   IF NOT EXISTS FOR (m:Marca)     REQUIRE m.nombre IS UNIQUE;
+CREATE CONSTRAINT objetivo_nombre IF NOT EXISTS FOR (o:Objetivo) REQUIRE o.nombre IS UNIQUE;
+CREATE INDEX producto_nombre IF NOT EXISTS FOR (p:Producto) ON (p.nombre);
+CREATE INDEX cliente_nombre  IF NOT EXISTS FOR (c:Cliente)  ON (c.nombre);</pre>
+
+<h3>5.2 CRUD</h3>
+<p><b>Create</b> — cliente con sus objetivos:</p>
+<pre>CREATE (c:Cliente {id: $id, nombre: $nombre, email: $email, ciudad: $ciudad, creadoEn: datetime()})
+FOREACH (nombreObjetivo IN $objetivos |
+  MERGE (o:Objetivo {nombre: nombreObjetivo})
+  MERGE (c)-[:BUSCA]-&gt;(o))
+RETURN c.id AS id</pre>
+<p><b>Create</b> — producto con categoría, marca y objetivos:</p>
+<pre>CREATE (p:Producto {sku: $sku, nombre: $nombre, precio: toFloat($precio),
+                    stock: toInteger($stock), descripcion: $descripcion})
+MERGE (cat:Categoria {nombre: $categoria})
+MERGE (m:Marca {nombre: $marca})
+MERGE (p)-[:PERTENECE_A]-&gt;(cat)
+MERGE (p)-[:DE_MARCA]-&gt;(m)
+FOREACH (nombreObjetivo IN $objetivos |
+  MERGE (o:Objetivo {nombre: nombreObjetivo})
+  MERGE (p)-[:AYUDA_A]-&gt;(o))
+RETURN p.sku AS sku</pre>
+<p><b>Read</b> — cliente con objetivos y número de compras (proyección de mapa con pattern comprehension y subconsulta <code>COUNT{}</code>):</p>
+<pre>MATCH (c:Cliente)
+RETURN c { .id, .nombre, .email, .ciudad,
+           objetivos: [(c)-[:BUSCA]-&gt;(o:Objetivo) | o.nombre],
+           totalCompras: COUNT { (c)-[:COMPRO]-&gt;(:Producto) } } AS cliente
+ORDER BY cliente.nombre</pre>
+<p><b>Update</b> — propiedades y reemplazo de objetivos:</p>
+<pre>MATCH (c:Cliente {id: $id})
+SET c.nombre = coalesce($nombre, c.nombre),
+    c.email  = coalesce($email,  c.email),
+    c.ciudad = coalesce($ciudad, c.ciudad)
+WITH c
+OPTIONAL MATCH (c)-[b:BUSCA]-&gt;(:Objetivo) WHERE $objetivos IS NOT NULL
+DELETE b
+WITH DISTINCT c
+FOREACH (nombreObjetivo IN coalesce($objetivos, []) |
+  MERGE (o:Objetivo {nombre: nombreObjetivo})
+  MERGE (c)-[:BUSCA]-&gt;(o))
+RETURN c.id AS id</pre>
+<p><b>Delete</b> — nodo y todas sus relaciones:</p>
+<pre>MATCH (c:Cliente {id: $id}) DETACH DELETE c
+MATCH (p:Producto {sku: $sku}) DETACH DELETE p</pre>
+
+<h3>5.3 Compra transaccional con control de inventario</h3>
+<p>El <code>SET</code> sobre una propiedad temporal adquiere un <b>bloqueo de escritura</b> en el nodo producto que se mantiene hasta el COMMIT, de modo que dos compras simultáneas no pueden vender las mismas unidades. Todo ocurre en una sola transacción ACID.</p>
+<pre>MATCH (c:Cliente {id: $clienteId}), (p:Producto {sku: $sku})
+SET p.__lock = true REMOVE p.__lock
+WITH c, p
+WHERE p.stock &gt;= $cantidad
+SET p.stock = p.stock - $cantidad
+MERGE (c)-[k:COMPRO]-&gt;(p)
+  ON CREATE SET k.cantidad = $cantidad, k.veces = 1, k.primeraFecha = date(), k.ultimaFecha = date()
+  ON MATCH  SET k.cantidad = k.cantidad + $cantidad, k.veces = k.veces + 1, k.ultimaFecha = date()
+RETURN p.stock AS stockRestante, k.cantidad AS cantidadAcumulada</pre>
+<p>Devolución (elimina la relación y regresa el stock) y calificación (solo si existe la compra):</p>
+<pre>MATCH (c:Cliente {id: $clienteId})-[k:COMPRO]-&gt;(p:Producto {sku: $sku})
+SET p.stock = p.stock + k.cantidad
+WITH p, k, k.cantidad AS devueltos
+DELETE k
+RETURN devueltos, p.stock AS stockActual
+
+MATCH (c:Cliente {id: $clienteId})-[:COMPRO]-&gt;(p:Producto {sku: $sku})
+MERGE (c)-[r:CALIFICO]-&gt;(p)
+SET r.estrellas = $estrellas, r.fecha = date()</pre>
+
+<h3>5.4 Consultas especializadas del paradigma de grafo</h3>
+<p><b>Q1. Filtrado colaborativo con similitud de Jaccard</b> (recorrido de 3 saltos). La similitud entre dos clientes es |A∩B| / |A∪B| de sus conjuntos de productos; se toman los 10 vecinos más parecidos y se suman sus similitudes para cada producto que el cliente aún no tiene.</p>
+<pre>MATCH (yo:Cliente {id: $clienteId})-[:COMPRO]-&gt;(:Producto)&lt;-[:COMPRO]-(otro:Cliente)
+WHERE otro &lt;&gt; yo
+WITH yo, otro, count(*) AS enComun
+WITH yo, otro, enComun,
+     COUNT { (yo)-[:COMPRO]-&gt;(:Producto) }   AS misCompras,
+     COUNT { (otro)-[:COMPRO]-&gt;(:Producto) } AS susCompras
+WITH yo, otro, toFloat(enComun) / (misCompras + susCompras - enComun) AS similitud
+ORDER BY similitud DESC
+LIMIT 10
+MATCH (otro)-[:COMPRO]-&gt;(rec:Producto)
+WHERE NOT EXISTS { (yo)-[:COMPRO]-&gt;(rec) } AND rec.stock &gt; 0
+WITH rec, sum(similitud) AS puntaje, collect(otro.nombre) AS clientesSimilares
+RETURN rec.sku AS sku, rec.nombre AS nombre, rec.precio AS precio,
+       round(puntaje, 3) AS puntaje, clientesSimilares[..3] AS porque
+ORDER BY puntaje DESC, nombre
+LIMIT $limite</pre>
+<p><i>Resultado esperado con los datos de prueba para C001 (Ana):</i> Barras de Proteína (0.543), Crema de Cacahuate, Ganador de Peso y Glutamina (0.400 cada uno).</p>
+
+<p><b>Q2. Recomendación por objetivo</b> (basada en contenido, 2 saltos Cliente → Objetivo ← Producto):</p>
+<pre>MATCH (yo:Cliente {id: $clienteId})-[:BUSCA]-&gt;(o:Objetivo)&lt;-[:AYUDA_A]-(rec:Producto)
+WHERE NOT EXISTS { (yo)-[:COMPRO]-&gt;(rec) } AND rec.stock &gt; 0
+WITH rec, collect(o.nombre) AS objetivos
+RETURN rec.sku AS sku, rec.nombre AS nombre, rec.precio AS precio,
+       objetivos, size(objetivos) AS coincidencias,
+       COUNT { (:Cliente)-[:COMPRO]-&gt;(rec) } AS popularidad
+ORDER BY coincidencias DESC, popularidad DESC, nombre
+LIMIT $limite</pre>
+
+<p><b>Q3. Quienes compraron este producto también compraron:</b></p>
+<pre>MATCH (p:Producto {sku: $sku})&lt;-[:COMPRO]-(c:Cliente)-[:COMPRO]-&gt;(otro:Producto)
+WHERE otro &lt;&gt; p
+RETURN otro.sku AS sku, otro.nombre AS nombre, otro.precio AS precio,
+       count(DISTINCT c) AS clientes
+ORDER BY clientes DESC, nombre
+LIMIT $limite</pre>
+
+<p><b>Q4. Pares de productos comprados juntos</b> (para armar combos):</p>
+<pre>MATCH (a:Producto)&lt;-[:COMPRO]-(c:Cliente)-[:COMPRO]-&gt;(b:Producto)
+WHERE a.sku &lt; b.sku
+RETURN a.nombre AS productoA, b.nombre AS productoB, count(c) AS veces
+ORDER BY veces DESC, productoA
+LIMIT $limite</pre>
+
+<p><b>Q5. Camino más corto entre dos clientes</b> (búsqueda de caminos). Modo <i>referidos</i>: solo relaciones <code>:REFIRIO</code> en su dirección; modo <i>general</i>: cualquier relación sin dirección.</p>
+<pre>// Cadena de referidos
+MATCH (a:Cliente {id: $desdeId}), (b:Cliente {id: $hastaId})
+MATCH ruta = shortestPath((a)-[:REFIRIO*..10]-&gt;(b))
+RETURN length(ruta) AS saltos,
+       [n IN nodes(ruta) | {id: elementId(n), etiqueta: labels(n)[0], nombre: coalesce(n.nombre, n.sku)}] AS nodos,
+       [r IN relationships(ruta) | {tipo: type(r), desde: elementId(startNode(r)), hasta: elementId(endNode(r))}] AS relaciones
+
+// Conexión general
+MATCH (a:Cliente {id: $desdeId}), (b:Cliente {id: $hastaId})
+MATCH ruta = shortestPath((a)-[*..8]-(b))
+RETURN length(ruta) AS saltos, nodes(ruta), relationships(ruta)</pre>
+<p><i>Resultado esperado:</i> C001 → C012 en modo referidos: Ana → Luis → Ricardo → Emilio (3 saltos).</p>
+
+<p><b>Q6. Vecindad de un cliente a N saltos</b> (traversal de longitud variable, N validado entre 1 y 3):</p>
+<pre>MATCH ruta = (c:Cliente {id: $clienteId})-[*1..2]-()
+WITH ruta LIMIT 300
+WITH collect(ruta) AS rutas
+UNWIND rutas AS r1 UNWIND nodes(r1) AS n
+WITH rutas, collect(DISTINCT n) AS ns
+UNWIND rutas AS r2 UNWIND relationships(r2) AS r
+WITH ns, collect(DISTINCT r) AS rs
+RETURN [n IN ns | {id: elementId(n), etiqueta: labels(n)[0], nombre: coalesce(n.nombre, n.sku)}] AS nodos,
+       [r IN rs | {id: elementId(r), tipo: type(r), desde: elementId(startNode(r)), hasta: elementId(endNode(r))}] AS relaciones</pre>
+
+<p><b>Q7. Alcance en la red de referidos</b> (a cuántas personas llegó cada cliente, directa o indirectamente):</p>
+<pre>MATCH (c:Cliente)-[:REFIRIO*1..]-&gt;(alcanzado:Cliente)
+WITH c, count(DISTINCT alcanzado) AS alcance
+RETURN c.id AS id, c.nombre AS nombre, alcance,
+       COUNT { (c)-[:REFIRIO]-&gt;(:Cliente) } AS directos
+ORDER BY alcance DESC, nombre
+LIMIT $limite</pre>
+
+<h3>5.5 Integración con el SDK (src/config/db.js)</h3>
+<pre>const driver = neo4j.driver(
+  process.env.NEO4J_URI,                                   // neo4j+s://xxxx.databases.neo4j.io
+  neo4j.auth.basic(process.env.NEO4J_USERNAME, process.env.NEO4J_PASSWORD),
+  { maxConnectionPoolSize: 50, maxTransactionRetryTime: 15_000, disableLosslessIntegers: true }
+);
+
+async function read(cypher, params = {}) {
+  const session = driver.session({ database: DATABASE, defaultAccessMode: neo4j.session.READ });
+  try {
+    const result = await session.executeRead((tx) =&gt; tx.run(cypher, params));
+    return result.records.map((r) =&gt; r.toObject());
+  } finally {
+    await session.close();
+  }
+}</pre>
+
+<h2>6. Consistencia, rendimiento y seguridad</h2>
+<table>
+  <tr><th style="width:22%">Aspecto</th><th>Decisión en GymGraph</th></tr>
+  <tr><td>Consistencia</td><td>Neo4j es transaccional y ACID. Cada operación se ejecuta en una transacción administrada; la compra bloquea el nodo producto para evitar sobreventa. Con el esquema <code>neo4j+s://</code> el driver enruta las escrituras al miembro que acepta escrituras y usa <i>bookmarks</i> para ofrecer consistencia causal (leer lo que uno mismo escribió) dentro de una sesión.</td></tr>
+  <tr><td>Reintentos</td><td><code>executeRead/executeWrite</code> reintentan automáticamente errores transitorios (hasta 15 s), lo que da una conexión remota estable ante cortes momentáneos.</td></tr>
+  <tr><td>Pool de conexiones</td><td>Un único driver por proceso con pool de hasta 50 conexiones Bolt reutilizables; las sesiones son ligeras y se cierran en <code>finally</code>.</td></tr>
+  <tr><td>Rendimiento</td><td>Puntos de entrada indexados por restricciones UNIQUE; consultas parametrizadas (reutilizan el plan en caché); <code>LIMIT</code> en todos los recorridos y profundidad máxima acotada (≤ 3 en vecindad, ≤ 10 en caminos) para evitar explosiones combinatorias. Las consultas pueden analizarse con <code>PROFILE</code> en la consola de Aura.</td></tr>
+  <tr><td>Tipos de datos</td><td>Los enteros de JavaScript viajan como flotantes; por eso <code>LIMIT</code>, stock y estrellas se envían con <code>neo4j.int()</code> o <code>toInteger()</code>.</td></tr>
+  <tr><td>Seguridad</td><td>Credenciales solo en <code>.env</code> (excluido por <code>.gitignore</code>); conexión cifrada TLS (<code>neo4j+s</code>); consultas parametrizadas contra inyección de Cypher; validación de entradas en el backend.</td></tr>
+  <tr><td>Persistencia</td><td>AuraDB es un servicio administrado que almacena los datos de forma durable en la nube; los datos sobreviven a reinicios de la aplicación, lo que se demuestra en vivo.</td></tr>
+</table>
+
+<h2>7. Datos iniciales (seeding)</h2>
+<p>El script <code>scripts/seed.js</code> (<code>npm run setup</code>) limpia la base y carga 12 clientes, 24 productos, 10 categorías, 6 marcas y 5 objetivos, con 46 compras, 12 calificaciones y 9 relaciones de referido. Los datos se diseñaron con grupos de clientes de hábitos similares (masa muscular, fuerza, pérdida de grasa, resistencia) y una cadena de referidos de cuatro niveles, para que todas las consultas especializadas produzcan resultados visibles en la demostración. Las cargas se hacen por lotes con <code>UNWIND $lista</code>, una sola consulta por tipo de dato.</p>
+<pre>UNWIND $compras AS row
+MATCH (c:Cliente {id: row.cliente}), (p:Producto {sku: row.sku})
+SET p.stock = p.stock - row.cantidad
+MERGE (c)-[k:COMPRO]-&gt;(p)
+  ON CREATE SET k.cantidad = row.cantidad, k.veces = 1,
+                k.primeraFecha = date() - duration({days: row.hace}),
+                k.ultimaFecha  = date() - duration({days: row.hace})</pre>
+
+</body>
+</html>

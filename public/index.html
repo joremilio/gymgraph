@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GymGraph · Recomendaciones con Neo4j</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Librería para dibujar el grafo en el navegador -->
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="marca">
+      <span class="logo">◆</span>
+      <div>
+        <h1>GymGraph</h1>
+        <small>Motor de recomendaciones · Neo4j AuraDB</small>
+      </div>
+    </div>
+    <div id="estado" class="estado">Conectando…</div>
+  </header>
+
+  <nav>
+    <button class="tab activo" data-tab="clientes">Clientes</button>
+    <button class="tab" data-tab="productos">Productos</button>
+    <button class="tab" data-tab="compras">Compras y referidos</button>
+    <button class="tab" data-tab="recomendaciones">Recomendaciones</button>
+    <button class="tab" data-tab="grafo">Explorar grafo</button>
+  </nav>
+
+  <main>
+    <!-- ===================== CLIENTES ===================== -->
+    <section id="clientes" class="panel activo">
+      <div class="dos-columnas">
+        <form id="form-cliente" class="tarjeta">
+          <h2 id="titulo-form-cliente">Nuevo cliente</h2>
+          <input type="hidden" name="id" />
+          <label>Nombre <input name="nombre" required /></label>
+          <label>Email <input name="email" type="email" required /></label>
+          <label>Ciudad <input name="ciudad" /></label>
+          <fieldset><legend>Objetivos</legend><div id="chk-objetivos-cliente" class="checks"></div></fieldset>
+          <div class="acciones">
+            <button type="submit">Guardar</button>
+            <button type="button" class="secundario" id="cancelar-cliente">Cancelar</button>
+          </div>
+        </form>
+        <div class="tarjeta">
+          <h2>Clientes <span id="total-clientes" class="pill"></span></h2>
+          <table>
+            <thead><tr><th>ID</th><th>Nombre</th><th>Ciudad</th><th>Objetivos</th><th>Compras</th><th></th></tr></thead>
+            <tbody id="tabla-clientes"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== PRODUCTOS ===================== -->
+    <section id="productos" class="panel">
+      <div class="dos-columnas">
+        <form id="form-producto" class="tarjeta">
+          <h2 id="titulo-form-producto">Nuevo producto</h2>
+          <input type="hidden" name="editando" />
+          <label>SKU <input name="sku" required /></label>
+          <label>Nombre <input name="nombre" required /></label>
+          <div class="fila">
+            <label>Precio (MXN) <input name="precio" type="number" min="0" step="0.01" required /></label>
+            <label>Stock <input name="stock" type="number" min="0" step="1" value="10" /></label>
+          </div>
+          <label>Categoría <input name="categoria" list="lista-categorias" required /></label>
+          <label>Marca <input name="marca" list="lista-marcas" required /></label>
+          <label>Descripción <input name="descripcion" /></label>
+          <fieldset><legend>Ayuda a lograr</legend><div id="chk-objetivos-producto" class="checks"></div></fieldset>
+          <datalist id="lista-categorias"></datalist>
+          <datalist id="lista-marcas"></datalist>
+          <div class="acciones">
+            <button type="submit">Guardar</button>
+            <button type="button" class="secundario" id="cancelar-producto">Cancelar</button>
+          </div>
+        </form>
+        <div class="tarjeta">
+          <h2>Productos <span id="total-productos" class="pill"></span></h2>
+          <table>
+            <thead><tr><th>SKU</th><th>Nombre</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>★</th><th></th></tr></thead>
+            <tbody id="tabla-productos"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== COMPRAS ===================== -->
+    <section id="compras" class="panel">
+      <div class="tres-columnas">
+        <form id="form-compra" class="tarjeta">
+          <h2>Registrar compra</h2>
+          <label>Cliente <select name="cliente" class="sel-cliente" required></select></label>
+          <label>Producto <select name="sku" class="sel-producto" required></select></label>
+          <label>Cantidad <input name="cantidad" type="number" min="1" value="1" /></label>
+          <button type="submit">Comprar</button>
+        </form>
+        <form id="form-calificacion" class="tarjeta">
+          <h2>Calificar producto</h2>
+          <label>Cliente <select name="cliente" class="sel-cliente" required></select></label>
+          <label>Producto <select name="sku" class="sel-producto" required></select></label>
+          <label>Estrellas <select name="estrellas"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></label>
+          <button type="submit">Calificar</button>
+        </form>
+        <form id="form-referido" class="tarjeta">
+          <h2>Registrar referido</h2>
+          <label>Quién invita <select name="referente" class="sel-cliente" required></select></label>
+          <label>Invitado <select name="referido" class="sel-cliente" required></select></label>
+          <button type="submit">Guardar referido</button>
+        </form>
+      </div>
+      <div class="tarjeta">
+        <h2>Historial del cliente</h2>
+        <label class="inline">Cliente <select id="sel-historial" class="sel-cliente"></select></label>
+        <table>
+          <thead><tr><th>SKU</th><th>Producto</th><th>Cantidad total</th><th>Última compra</th><th></th></tr></thead>
+          <tbody id="tabla-historial"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== RECOMENDACIONES ===================== -->
+    <section id="recomendaciones" class="panel">
+      <div class="dos-columnas iguales">
+        <div class="tarjeta">
+          <h2>Para un cliente</h2>
+          <label class="inline">Cliente <select id="sel-reco-cliente" class="sel-cliente"></select></label>
+          <h3>Clientes parecidos también compraron <small>(filtrado colaborativo · Jaccard)</small></h3>
+          <ul id="reco-colaborativo" class="lista"></ul>
+          <h3>Según sus objetivos <small>(basado en contenido)</small></h3>
+          <ul id="reco-objetivo" class="lista"></ul>
+        </div>
+        <div class="tarjeta">
+          <h2>Para un producto</h2>
+          <label class="inline">Producto <select id="sel-reco-producto" class="sel-producto"></select></label>
+          <h3>Quienes lo compraron también compraron</h3>
+          <ul id="reco-tambien" class="lista"></ul>
+          <h3>Combos: productos que más se compran juntos</h3>
+          <ul id="reco-juntos" class="lista"></ul>
+          <h3>Clientes con mayor alcance en referidos</h3>
+          <ul id="reco-influencers" class="lista"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== GRAFO ===================== -->
+    <section id="grafo" class="panel">
+      <div class="tarjeta">
+        <div class="controles">
+          <div>
+            <h3>Vecindad de un cliente</h3>
+            <label class="inline">Cliente <select id="sel-vecindad" class="sel-cliente"></select></label>
+            <label class="inline">Saltos <select id="sel-profundidad"><option>1</option><option selected>2</option><option>3</option></select></label>
+            <button id="btn-vecindad">Ver vecindad</button>
+          </div>
+          <div>
+            <h3>Camino más corto entre dos clientes</h3>
+            <label class="inline">Desde <select id="sel-desde" class="sel-cliente"></select></label>
+            <label class="inline">Hasta <select id="sel-hasta" class="sel-cliente"></select></label>
+            <label class="inline">Tipo <select id="sel-modo"><option value="general">Cualquier relación</option><option value="referidos">Cadena de referidos</option></select></label>
+            <button id="btn-camino">Buscar camino</button>
+          </div>
+        </div>
+        <p id="info-grafo" class="info"></p>
+        <div id="lienzo"></div>
+        <div class="leyenda" id="leyenda"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

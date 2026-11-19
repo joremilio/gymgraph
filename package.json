@@ -1,0 +1,25 @@
+{
+  "name": "gymgraph",
+  "version": "1.0.0",
+  "description": "Motor de recomendaciones para una tienda de productos de gimnasio usando Neo4j AuraDB (modelo de grafo) y Node.js",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "schema": "node scripts/schema.js",
+    "seed": "node scripts/seed.js",
+    "setup": "node scripts/schema.js && node scripts/seed.js",
+    "check": "node scripts/check-connection.js"
+  },
+  "author": "Jorge Emilio León Saucedo",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "neo4j-driver": "^5.28.1"
+  }
+}
